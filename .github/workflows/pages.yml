@@ -1,43 +1,71 @@
+# Название workflow (конвейера) — отображается на вкладке Actions в GitHub
 name: Build and publish app
 
+# Условия запуска workflow
 on:
   push:
+    # Запускать при пуше в ветку main
     branches: [main]
+  # Возможность запустить workflow вручную со вкладки Actions
   workflow_dispatch:
 
+# Права доступа, которые выдаются токену GITHUB_TOKEN внутри workflow
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: read        # Читать содержимое репозитория (для checkout)
+  pages: write          # Писать в GitHub Pages (публикация сайта)
+  id-token: write       # Выдавать OIDC-токен для аутентификации деплоя
 
+# Настройка параллельных запусков
 concurrency:
+  # Все запуски объединяются в одну группу "pages" (по одному запуску одновременно)
   group: pages
+  # Новый запуск отменяет предыдущий незавершённый
   cancel-in-progress: true
 
+# Список задач (jobs) workflow
 jobs:
+  # Задача с именем "deploy"
   deploy:
+    # Виртуальная машина, на которой выполняется задача
     runs-on: ubuntu-latest
+    # Среда GitHub Pages: имя окружения и URL опубликованного сайта
     environment:
       name: github-pages
+      # URL берётся из выхода шага с id "deployment" (шаг Deploy)
       url: ${{ steps.deployment.outputs.page_url }}
+    # Последовательность шагов задачи
     steps:
+      # Шаг 1: клонировать репозиторий на виртуальную машину
       - name: Checkout
         uses: actions/checkout@v4
+
+      # Шаг 2: установить Node.js нужной версии
       - name: Node
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          cache: npm
+          node-version: '22'  # Версия Node.js
+          cache: npm          # Кэшировать зависимости npm для ускорения сборки
+
+      # Шаг 3: установить зависимости строго по package-lock.json
+      # (воспроизводимая установка, быстрее чем npm install)
       - name: Install
         run: npm ci
+
+      # Шаг 4: собрать проект (Webpack кладёт готовые файлы в папку app)
       - name: Build
         run: npm run build
+
+      # Шаг 5: подготовить настройки GitHub Pages для репозитория
       - name: Configure Pages
         uses: actions/configure-pages@v5
+
+      # Шаг 6: упаковать собранный сайт в артефакт для Pages
       - name: Upload app
         uses: actions/upload-pages-artifact@v4
         with:
-          path: app
+          path: app  # Папка с собранными файлами для публикации
+
+      # Шаг 7: опубликовать артефакт на GitHub Pages
       - name: Deploy
-        id: deployment
+        id: deployment  # id нужен, чтобы шаг environment мог взять page_url из выхода
         uses: actions/deploy-pages@v4
